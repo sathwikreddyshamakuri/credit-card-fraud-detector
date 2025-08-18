@@ -163,3 +163,6 @@ If you downloaded only **Top-K**, use a robust join approach:
 
 ## License
 MIT (replace with your preferred license)
+
+[![Python CI](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml)
+
