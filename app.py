@@ -1,4 +1,4 @@
-# app.py — simplified, tabbed UI
+# app.py — simplified, tabbed UI with saved threshold default
 import json
 from pathlib import Path
 import numpy as np
@@ -12,7 +12,38 @@ except Exception:
 
 st.set_page_config(page_title="Credit Card Fraud Detector", page_icon="💳", layout="wide")
 
-#  Load model & stats
+ARTIFACTS_DIR = Path("artifacts")
+CONF_PATH = ARTIFACTS_DIR / "config.json"
+
+
+#Config helpers (default threshold) 
+def get_default_threshold() -> float:
+    try:
+        if CONF_PATH.exists():
+            data = json.loads(CONF_PATH.read_text())
+            v = float(data.get("threshold", 0.5))
+            return float(min(max(v, 0.0), 1.0))
+    except Exception:
+        pass
+    return 0.5
+
+
+def save_default_threshold(v: float) -> None:
+    try:
+        ARTIFACTS_DIR.mkdir(exist_ok=True)
+        data = {}
+        if CONF_PATH.exists():
+            try:
+                data = json.loads(CONF_PATH.read_text())
+            except Exception:
+                data = {}
+        data["threshold"] = float(min(max(v, 0.0), 1.0))
+        CONF_PATH.write_text(json.dumps(data, indent=2))
+    except Exception as e:
+        st.warning(f"Could not save default threshold: {e}")
+
+
+# ---------- Load model & stats ----------
 @st.cache_resource(show_spinner=False)
 def load_model():
     model_path = Path("artifacts/model.joblib")
@@ -29,10 +60,13 @@ def load_model():
             p = 0.15 * (amt / (amt.max() + 1e-9)) if amt.max() > 0 else np.zeros_like(amt, dtype=float)
             p = np.clip(p, 0.0, 0.15)
             return np.c_[1 - p, p]
+
         @property
         def classes_(self):
-            return np.array([0,1])
+            return np.array([0, 1])
+
     return _DemoModel(), False, "🧪 Demo model active (put your trained model at artifacts/model.joblib)"
+
 
 @st.cache_resource(show_spinner=False)
 def load_feature_stats():
@@ -45,8 +79,10 @@ def load_feature_stats():
             return None, False, f"⚠️ Could not read feature_stats.json: {e}"
     return None, False, "ℹ️ No feature_stats.json (we’ll fill missing features with 0.0)."
 
+
 model, model_is_real, model_msg = load_model()
 feature_stats, has_stats, stats_msg = load_feature_stats()
+
 
 def expected_features():
     feats = None
@@ -58,10 +94,12 @@ def expected_features():
     if feats is None and has_stats and "feature_order" in feature_stats:
         feats = list(feature_stats["feature_order"])
     if feats is None:
-        feats = ["Time"] + [f"V{i}" for i in range(1,29)] + ["Amount"]
+        feats = ["Time"] + [f"V{i}" for i in range(1, 29)] + ["Amount"]
     return feats
 
+
 FEATURES = expected_features()
+
 
 def coerce(df: pd.DataFrame) -> pd.DataFrame:
     cols = FEATURES
@@ -74,6 +112,7 @@ def coerce(df: pd.DataFrame) -> pd.DataFrame:
     for c in df.columns:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
     return df
+
 
 def score(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     X = coerce(df)
@@ -96,28 +135,39 @@ def score(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     out["is_fraud_pred"] = (out["fraud_probability"] >= threshold).astype(int)
     return out
 
-#  Header & controls
+
+#  Header & controls 
 st.markdown("## 💳 Credit Card Fraud Detector")
 
 with st.container():
-    c1, c2, c3 = st.columns([1,1,2])
-    DEFAULT_THRESHOLD = 0.999  # set to 0.998915 if you want exact
-    threshold = c1.slider("Decision threshold", 0.0, 1.0, DEFAULT_THRESHOLD, 0.001)
+    c1, c2, c3 = st.columns([1, 1, 2])
+
+    # Slider uses saved default; step to 0.001 and full 0..1 range
+    default_th = get_default_threshold()
+    threshold = c1.slider("Decision threshold", 0.0, 1.0, default_th, 0.001, help="Scores ≥ threshold are flagged as fraud.")
+
+    # Save the current slider value as default
+    if c1.button("Save as default", use_container_width=True):
+        save_default_threshold(threshold)
+        st.success(f"Saved default threshold = {threshold:.3f} → artifacts/config.json")
+
     c2.number_input("Show top-K rows (Batch tab)", 1, 5000, 20, 1, key="topk")
+
     # status strip
     ok_style = "✅" if model_is_real else "🧪"
     st.caption(f"{ok_style} {model_msg}  •  {stats_msg}")
 
 tabs = st.tabs(["Quick Predict", "Batch CSV", "JSON Row"])
 
-# Tab 1: Quick Predict 
+# - Tab 1: Quick Predict 
 with tabs[0]:
     st.markdown("### Quick Predict")
     st.write(
         "Enter **Amount** (and optionally **Time**). "
-        "All other features will be filled from defaults" + (" in your feature stats." if has_stats else " (0.0 if no stats).")
+        "All other features will be filled from defaults"
+        + (" in your feature stats." if has_stats else " (0.0 if no stats).")
     )
-    q1, q2, q3 = st.columns([1,1,2])
+    q1, q2, q3 = st.columns([1, 1, 2])
     amt = q1.number_input("Amount", min_value=0.0, value=50.0, step=1.0)
     time = q2.number_input("Time (seconds since first txn)", min_value=0.0, value=10_000.0, step=100.0)
 
@@ -135,7 +185,7 @@ with tabs[0]:
         st.success(f"Fraud probability: **{prob:.3f}**  •  Prediction: {'🚩 FRAUD' if label==1 else '✅ LEGIT'}")
 
         st.markdown("**Scored row (features shown after coercion):**")
-        st.dataframe(res[FEATURES + ["fraud_probability", "is_fraud_pred"]])
+        st.dataframe(res[FEATURES + ["fraud_probability", "is_fraud_pred"]], use_container_width=True)
 
     with st.expander("Need full control? (advanced form)"):
         st.write("This builds inputs for **all features** from your `feature_stats.json` ranges.")
@@ -152,7 +202,8 @@ with tabs[0]:
                 kwargs = {"value": default}
                 if r and isinstance(r, (list, tuple)) and len(r) == 2:
                     lo, hi = float(r[0]), float(r[1])
-                    if lo > hi: lo, hi = hi, lo
+                    if lo > hi:
+                        lo, hi = hi, lo
                     step = (hi - lo) / 100.0 if hi > lo else 0.01
                     kwargs.update({"min_value": lo, "max_value": hi, "step": max(step, 1e-4)})
                 v = (mcol1 if i % 2 == 0 else mcol2).number_input(feat, **kwargs)
@@ -163,13 +214,15 @@ with tabs[0]:
                 prob = float(res.loc[0, "fraud_probability"])
                 label = int(res.loc[0, "is_fraud_pred"])
                 st.success(f"Fraud probability: **{prob:.3f}**  •  Prediction: {'🚩 FRAUD' if label==1 else '✅ LEGIT'}")
-                st.dataframe(res[FEATURES + ["fraud_probability", "is_fraud_pred"]])
+                st.dataframe(res[FEATURES + ["fraud_probability", "is_fraud_pred"]], use_container_width=True)
 
-#  Tab 2: Batch CSV 
+#  Batch CSV
 with tabs[1]:
     st.markdown("### Batch CSV")
-    st.write("Upload a CSV with columns matching your model’s input schema (e.g., Time, V1..V28, Amount). "
-             "Extras are dropped; missing numeric columns are filled from defaults or 0.0.")
+    st.write(
+        "Upload a CSV with columns matching your model’s input schema (e.g., Time, V1..V28, Amount). "
+        "Extras are dropped; missing numeric columns are filled from defaults or 0.0."
+    )
     csv = st.file_uploader("Upload CSV", type=["csv"])
     if st.button("Run Prediction on CSV"):
         if not csv:
@@ -181,7 +234,10 @@ with tabs[1]:
                 flagged = int((scored["fraud_probability"] >= threshold).sum())
                 st.metric("Flagged (≥ threshold)", value=flagged)
                 topk = int(st.session_state.get("topk", 20))
-                st.dataframe(scored.sort_values("fraud_probability", ascending=False).head(topk), use_container_width=True)
+                st.dataframe(
+                    scored.sort_values("fraud_probability", ascending=False).head(topk),
+                    use_container_width=True,
+                )
                 st.download_button(
                     "⬇️ Download all results (CSV)",
                     data=scored.to_csv(index=False).encode("utf-8"),
@@ -191,7 +247,7 @@ with tabs[1]:
             except Exception as e:
                 st.error(f"Could not score CSV: {e}")
 
-# Tab 3: JSON Row 
+# JSON Row 
 with tabs[2]:
     st.markdown("### JSON Row")
     st.write("Paste a single JSON object (one transaction). Only provide fields you know; we’ll fill the rest.")

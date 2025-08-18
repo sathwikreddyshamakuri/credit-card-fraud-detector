@@ -1,6 +1,5 @@
-[![Python CI](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml)
-
 # Credit Card Fraud Detector (Streamlit + scikit-learn)
+
 A VS Code project to train a model on the Kaggle credit-card fraud dataset and run an interactive UI for scoring transactions.
 
 ---

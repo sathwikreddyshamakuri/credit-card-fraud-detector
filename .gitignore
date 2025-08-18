@@ -24,3 +24,10 @@ artifacts/*.bin
 # Logs
 logs/
 *.log
+
+# outputs
+fraud_scores.csv
+threshold_sweep.csv
+*.zip
+fraud_scores*.csv
+threshold_sweep*.csv
