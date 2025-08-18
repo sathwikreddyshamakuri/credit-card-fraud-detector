@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Data & artifacts (keep model out of Git by default)
+data/
+artifacts/model.joblib
+artifacts/*.pkl
+artifacts/*.bin
+
+# Logs
+logs/
+*.log

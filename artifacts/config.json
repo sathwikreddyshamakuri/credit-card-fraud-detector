@@ -1,0 +1,12 @@
+# near imports
+CONF_PATH = Path("artifacts/config.json")
+def get_default_threshold():
+    try:
+        if CONF_PATH.exists():
+            return float(json.loads(CONF_PATH.read_text()).get("threshold", 0.5))
+    except Exception:
+        pass
+    return 0.5
+
+# then
+threshold = c1.slider("Decision threshold", 0.0, 1.0, get_default_threshold(), 0.001)
