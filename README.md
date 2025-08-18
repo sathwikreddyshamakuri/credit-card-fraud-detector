@@ -157,21 +157,6 @@ If you downloaded only **Top-K**, use a robust join approach:
 
 ---
 
-## Keep large files out of Git
-
-This repo ships with a `.gitignore` that excludes `data/` and model binaries.  
-If you **want** to version the model:
-~~~bash
-git lfs install
-git lfs track "artifacts/*.joblib"
-git add .gitattributes artifacts/model.joblib
-git commit -m "model: add via Git LFS"
-git push
-~~~
-
----
-
-
 ## Notes & Acknowledgements
 - Dataset: “Credit Card Fraud Detection” (Kaggle).
 - Consider probability calibration (e.g., `CalibratedClassifierCV`) and tree models for improved performance.
