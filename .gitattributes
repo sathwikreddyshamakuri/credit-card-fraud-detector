@@ -1,2 +1,3 @@
 notebooks/* linguist-documentation
 *.ipynb linguist-documentation
+artifacts/*.joblib binary

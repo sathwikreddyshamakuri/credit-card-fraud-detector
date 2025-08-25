@@ -31,3 +31,7 @@ threshold_sweep.csv
 *.zip
 fraud_scores*.csv
 threshold_sweep*.csv
+
+# track model artifact for container build
+!artifacts/
+!artifacts/model.joblib
