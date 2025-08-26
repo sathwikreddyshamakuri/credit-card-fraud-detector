@@ -35,3 +35,12 @@ threshold_sweep*.csv
 # track model artifact for container build
 !artifacts/
 !artifacts/model.joblib
+
+# Ignore Terraform provider cache
+infra/terraform/.terraform/
+
+# local IAM trust doc
+trust.json
+# Terraform provider cache
+infra/terraform/.terraform/
+
