@@ -23,11 +23,6 @@ AWS Lambda (container image)
 Function URL: /healthz, /predict
 ---
 
-
-> **Tip:** Deploy Lambda with an immutable **commit-SHA tag** (e.g., `:49f95a8`) instead of `:latest`.
-
----
-
 ## Repo layout
 
 ├─ app/
@@ -49,9 +44,6 @@ Function URL: /healthz, /predict
 ├─ Dockerfile # Lambda Python 3.11 base; bakes model
 └─ .github/workflows/
 └─ ecr_push.yaml
----
-
-
 ---
 
 ## Tech stack
@@ -113,7 +105,6 @@ streamlit run .\streamlit_app.py
       "label": 0
     }
     ```
-
 ---
 
 ## CI/CD (GitHub Actions → ECR)
@@ -126,9 +117,6 @@ streamlit run .\streamlit_app.py
 <ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/ccfd-repo:latest
 <ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/ccfd-repo:<sha7>
 ---
-```sql
-
----
 
 ## Deploy to AWS Lambda (container image)
 
@@ -139,6 +127,7 @@ streamlit run .\streamlit_app.py
 $Profile="YOUR_AWS_PROFILE"; $Region="us-east-1"
 $Account="<YOUR_ACCOUNT_ID>"; $Sha7="<sha7-from-ECR-or-Actions>"
 $ImageUri="$Account.dkr.ecr.$Region.amazonaws.com/ccfd-repo:$Sha7"
+```
 
 # (First time) get/create role and set $RoleArn accordingly
 $RoleArn = (aws iam get-role --profile $Profile --region $Region --role-name ccfd-lambda-role --query "Role.Arn" --output text)
@@ -158,7 +147,7 @@ aws lambda update-function-code `
 --profile $Profile --region $Region `
 --function-name ccfd-fn `
 --image-uri $ImageUri
-```
+
 ## Function URL(For Quick Testing)
 ```powershell
 aws lambda create-function-url-config `
