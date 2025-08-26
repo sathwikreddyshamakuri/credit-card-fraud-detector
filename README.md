@@ -2,30 +2,30 @@
 
 [![Build and Push to ECR](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ecr-push.yml/badge.svg?branch=main)](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ecr-push.yml)
 
-Train a scikit-learn model on the credit-card fraud dataset and run a production-style **inference API** (FastAPI) packaged as a **container** and deployed on **AWS Lambda** (via **Amazon ECR**). Includes an optional Streamlit UI for local demos and a GitHub Actions workflow that builds & pushes images to ECR.
+Train a scikit-learn model on the credit‑card fraud dataset and run a production‑style **inference API** (FastAPI) packaged as a **container** and deployed on **AWS Lambda** (via **Amazon ECR**). Includes an optional Streamlit UI for local demos and a GitHub Actions workflow that builds & pushes images to ECR.
 
-- **Model:** Logistic Regression (30 features), hold-out **ROC AUC ≈ 0.972**
+- **Model:** Logistic Regression (30 features), hold‑out **ROC AUC ≈ 0.972**
 - **API:** FastAPI endpoints `GET /healthz`, `POST /predict` (Lambda via Mangum)
 - **Infra:** Container image in **ECR**, executed by **AWS Lambda** (Function URL for quick tests)
-- **CI/CD:** GitHub Actions builds & pushes `:latest` and `:<commit-sha>` tags for reproducible rollouts
+- **CI/CD:** GitHub Actions builds & pushes `:latest` and `:<commit‑sha>` tags for reproducible rollouts
 
 ---
 
 ## Architecture
 ```text
-├─ train.py ──> artifacts/model.joblib
+train.py  ──>  artifacts/model.joblib
    │
    ▼
-├─ FastAPI app ──(Dockerfile)──> GitHub Actions ──> Amazon ECR
+FastAPI app  ──(Dockerfile)──>  GitHub Actions  ──>  Amazon ECR
    │
    ▼
-├─ AWS Lambda (container image)
+AWS Lambda (container image)
    │
    ▼
-└─ Function URL: /healthz, /predict
+Function URL: /healthz, /predict
 ```
 
-> **Tip:** Prefer deploying Lambda with an immutable **commit-SHA tag** (e.g., `:2918ddb`) instead of `:latest`.
+> **Tip:** Prefer deploying Lambda with an immutable **commit‑SHA tag** (e.g., `:2918ddb`) instead of `:latest`.
 
 ---
 
@@ -38,7 +38,7 @@ Train a scikit-learn model on the credit-card fraud dataset and run a production
 ├─ artifacts/
 │  └─ model.joblib       # Trained model (from train.py or baked in image)
 ├─ data/
-│  └─ creditcard.csv     # Dataset (see Dataset)
+│  └─ creditcard.csv     # Dataset (see Dataset section)
 ├─ scripts/
 │  ├─ __init__.py
 │  ├─ make_dummy_model.py
@@ -56,7 +56,6 @@ Train a scikit-learn model on the credit-card fraud dataset and run a production
 ---
 
 ## Quickstart (local, Windows PowerShell)
-
 ```powershell
 # 1) Create & activate venv
 python -m venv .venv
@@ -66,7 +65,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # 3) Train the model (writes artifacts/model.joblib + artifacts/feature_stats.json)
-python .\train.py
+python .	rain.py
 
 # 4) Run API locally
 uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -87,7 +86,6 @@ streamlit run .\streamlit_app.py
 ---
 
 ## API
-
 **Base:** local `http://127.0.0.1:8000` or your **Lambda Function URL**
 
 - `GET /healthz` → `{"ok": true, "version": "v1", "has_model": true}`
@@ -112,7 +110,6 @@ streamlit run .\streamlit_app.py
 ---
 
 ## CI/CD (GitHub Actions → ECR)
-
 - Workflow: `.github/workflows/ecr-push.yml` (badge at top of this README)
 - Secrets (Repo → **Settings** → **Secrets and variables** → **Actions**):  
   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`  
@@ -130,7 +127,6 @@ Trigger a run by pushing to `main` or use **Actions → Build and Push to ECR �
 **Prereqs:** ECR image exists; IAM role with policy `AWSLambdaBasicExecutionRole`.
 
 **Create or update function (PowerShell)**
-
 ```powershell
 $Profile="YOUR_AWS_PROFILE"; $Region="us-east-1"
 $Account="<YOUR_ACCOUNT_ID>"; $Repo="ccfd-repo"
@@ -141,7 +137,7 @@ $Sha7 = aws ecr describe-images --profile $Profile --region $Region --repository
 if (-not $Sha7 -or $Sha7 -eq "None" -or $Sha7 -eq "") { $Sha7 = git rev-parse --short=7 HEAD }
 $ImageUri = "{0}.dkr.ecr.{1}.amazonaws.com/{2}:{3}" -f $Account, $Region, $Repo, $Sha7
 
-# Get role ARN (create & attach AWSLambdaBasicExecutionRole if missing)
+# Get role ARN (create and attach AWSLambdaBasicExecutionRole if missing)
 $RoleArn = aws iam get-role --profile $Profile --region $Region --role-name ccfd-lambda-role --query "Role.Arn" --output text
 
 # Create (first time only)
@@ -176,7 +172,6 @@ $FnUrl = aws lambda get-function-url-config `
 ---
 
 ## Dataset
-
 This project expects `data/creditcard.csv` (Kaggle: **“Credit Card Fraud Detection”**). Put the file under `data/` and run `python train.py` to (re)train.
 
 > **Note:** Do **not** commit the dataset to Git.
@@ -184,13 +179,11 @@ This project expects `data/creditcard.csv` (Kaggle: **“Credit Card Fraud Detec
 ---
 
 ## Security & privacy
-
 - No secrets in code. CI uses GitHub **Actions Secrets** only.  
-- Function URL is **public** in quick-start scripts. For production, prefer **AWS_IAM** or API Gateway with auth & CORS.  
+- Function URL is **public** in quick‑start scripts. For production, prefer **AWS_IAM** or API Gateway with auth & CORS.  
 - Model artifact (`artifacts/model.joblib`) is baked into the container; rotate image tags for immutable deploys.
 
 ---
 
 ## License
-
 MIT — see `LICENSE`.
