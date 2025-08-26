@@ -1,61 +1,58 @@
 # Credit Card Fraud Detector — FastAPI + Lambda + Streamlit
 
-Train a scikit-learn model on the credit-card fraud dataset and run a production-style *inference API* (FastAPI) packaged as a *container* and deployed on *AWS Lambda* (via *Amazon ECR*). Optional Streamlit UI for local demos. CI/CD builds and pushes images to ECR.
+Train a scikit-learn model on the credit-card fraud dataset and run a production-style **inference API** (FastAPI) packaged as a **container** and deployed on **AWS Lambda** (via **Amazon ECR**). Optional Streamlit UI for local demos. CI/CD builds and pushes images to ECR.
 
-- *Model:* Logistic Regression (30 features), hold-out *ROC AUC ≈ 0.972*
-- *API:* FastAPI (/healthz, /predict) adapted for Lambda with Mangum
-- *Infra:* Container in *ECR, executed by **AWS Lambda* (Function URL for testing)
-- *CI/CD:* GitHub Actions pushes **:latest** and **:<commit-sha7>** tags (immutable deploys recommended)
+- **Model:** Logistic Regression (30 features), hold-out **ROC AUC ≈ 0.972**
+- **API:** FastAPI (`/healthz`, `/predict`) adapted for Lambda with Mangum
+- **Infra:** Container in **ECR**, executed by **AWS Lambda** (Function URL for testing)
+- **CI/CD:** GitHub Actions pushes **`:latest`** and **`:<commit-sha7>`** tags (immutable deploys recommended)
 
 ---
 
 ## Architecture
 
-text
-[train.py] ──> artifacts/model.joblib
-   │
-   ▼
-[FastAPI app] ──(Dockerfile)──> GitHub Actions ──> Amazon ECR
-   │
-   ▼
- AWS Lambda (container image)
-   │
-   ▼
- Function URL: /healthz, /predict
+```
+train.py  --->  artifacts/model.joblib
+    |
+    v
+FastAPI app + Dockerfile  --->  GitHub Actions  --->  Amazon ECR
+    |
+    v
+AWS Lambda (container image)  --->  Function URL (/healthz, /predict)
+```
 
-
-> Tip: Prefer deploying Lambda with **:<commit-sha7>** instead of :latest.
+> Tip: Prefer deploying Lambda with `:<commit-sha7>` instead of `:latest`.
 
 ---
 
 ## Repo layout
 
-text
-├─ app/
-│  ├─ __init__.py
-│  ├─ main.py              # FastAPI app (local + Lambda via Mangum)
-│  └─ lambda_handler.py    # Lambda entrypoint
-├─ artifacts/
-│  └─ model.joblib         # Trained model (from train.py or baked in image)
-├─ data/
-│  └─ creditcard.csv       # (not committed) see “Dataset”
-├─ scripts/
-│  ├─ __init__.py
-│  ├─ make_dummy_model.py
-│  └─ smoke.ps1
-├─ streamlit_app.py        # Optional local demo UI
-├─ train.py                # Train + evaluate; writes artifacts/*
-├─ requirements.txt        # Pinned wheels for Lambda (no compilers)
-├─ Dockerfile              # Lambda Python 3.11 base; bakes model
-└─ .github/workflows/
-   └─ ecr_push.yaml
-
+```
+app/
+  __init__.py
+  main.py              # FastAPI app (local + Lambda via Mangum)
+  lambda_handler.py    # Lambda entrypoint
+artifacts/
+  model.joblib         # Trained model (from train.py or baked in image)
+data/
+  creditcard.csv       # (not committed) see “Dataset”
+scripts/
+  __init__.py
+  make_dummy_model.py
+  smoke.ps1
+streamlit_app.py       # Optional local demo UI
+train.py               # Train + evaluate; writes artifacts/*
+requirements.txt       # Pinned wheels for Lambda (no compilers)
+Dockerfile             # Lambda Python 3.11 base; bakes model
+.github/workflows/
+  ecr_push.yaml
+```
 
 ---
 
 ## Quickstart (local, Windows PowerShell)
 
-powershell
+```powershell
 # 1) Create & activate venv
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -64,7 +61,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # 3) Train (writes artifacts/model.joblib + artifacts/feature_stats.json)
-python .	rain.py
+python .\train.py
 
 # 4) Run API locally
 uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -77,56 +74,86 @@ $body = @{ features = @(0.1,0.2,0.3,0.4,0.5,0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0
   ConvertTo-Json -Compress
 irm -Method Post -Uri "http://127.0.0.1:8000/predict" -ContentType 'application/json' -Body $body |
   ConvertTo-Json -Depth 5
-
+```
 
 ---
 
 ## API
 
-*Base:* local http://127.0.0.1:8000 or your *Lambda Function URL*
+**Base:** local `http://127.0.0.1:8000` or your **Lambda Function URL**
 
-- GET /healthz → {"ok": true, "version": "v1", "has_model": true}
-- POST /predict
-  - *Request*
-    json
+- `GET /healthz` → `{"ok": true, "version": "v1", "has_model": true}`
+- `POST /predict`
+  - **Request**
+    ```json
     {
       "features": [0.1, 0.2, "... 30 floats total ..."],
       "threshold": 0.5
     }
-    
-  - *Response*
-    json
+    ```
+  - **Response**
+    ```json
     {
       "request_id": "uuid",
       "model_version": "v1",
       "prob": 0.009,
       "label": 0
     }
-    
+    ```
 
 ---
 
 ## CI/CD (GitHub Actions → ECR)
 
-Workflow: .github/workflows/ecr_push.yaml  
-Secrets (Repo → Settings → Secrets and variables → Actions):
-- AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-- Optional env: AWS_REGION=us-east-1, ECR_REGISTRY=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com, ECR_REPO=ccfd-repo
+Workflow file path: `.github/workflows/ecr_push.yaml`
 
-*Images pushed*
-text
-<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/ccfd-repo:latest
-<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/ccfd-repo:<commit-sha7>   # recommended for deploys
+```
+name: Build and Push to ECR
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Extract short SHA
+        id: vars
+        run: echo "SHA7=$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+      - name: Build image
+        run: |
+          docker build -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:latest \
+                       -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:${{ steps.vars.outputs.SHA7 }} .
+      - name: Push image
+        run: |
+          docker push ${{ steps.ecr.outputs.registry }}/ccfd-repo:latest
+          docker push ${{ steps.ecr.outputs.registry }}/ccfd-repo:${{ steps.vars.outputs.SHA7 }}
+```
 
+> Ensure repo secrets exist: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.  
+> Actions must be enabled in **Settings → Actions → General**.
 
 ---
 
 ## Deploy to AWS Lambda (container image)
 
-*Prereqs:* ECR image exists; IAM role with AWSLambdaBasicExecutionRole.
+**Prereqs:** ECR image exists; IAM role `ccfd-lambda-role` with `AWSLambdaBasicExecutionRole`.
 
-*Create or update*
-powershell
+**Create or update**
+```powershell
 $Profile="YOUR_AWS_PROFILE"; $Region="us-east-1"
 $Account="<ACCOUNT_ID>"; $Sha7="<sha7-from-ECR-or-Actions>"
 $ImageUri="$Account.dkr.ecr.$Region.amazonaws.com/ccfd-repo:$Sha7"
@@ -145,10 +172,10 @@ aws lambda update-function-code `
   --profile $Profile --region $Region `
   --function-name ccfd-fn `
   --image-uri $ImageUri
+```
 
-
-*Function URL (quick testing)*
-powershell
+**Function URL (quick testing)**
+```powershell
 aws lambda create-function-url-config `
   --profile $Profile --region $Region `
   --function-name ccfd-fn --auth-type NONE 2>$null
@@ -157,26 +184,23 @@ $FnUrl = aws lambda get-function-url-config `
   --profile $Profile --region $Region `
   --function-name ccfd-fn --query "FunctionUrl" --output text
 "Function URL: $FnUrl"
-
-
-> For production, consider --auth-type AWS_IAM or fronting with API Gateway.
+```
 
 ---
 
 ## Dataset
 
-Place data/creditcard.csv (Kaggle: “Credit Card Fraud Detection”) under ./data/.  
-The CSV is *not* committed. After download:
+Place `data/creditcard.csv` (Kaggle: “Credit Card Fraud Detection”) under `./data/` and run:
 
-powershell
-python .	rain.py
-
+```powershell
+python .\train.py
+```
 
 Outputs:
-text
+```
 artifacts/model.joblib
 artifacts/feature_stats.json
-
+```
 
 ---
 
