@@ -12,26 +12,22 @@ Train a scikit-learn model on the credit-card fraud dataset and run a production
 ---
 
 ## Architecture
-
 ```text
-train.py ──> artifacts/model.joblib
+├─ train.py ──> artifacts/model.joblib
    │
    ▼
-FastAPI app ──(Dockerfile)──> GitHub Actions ──> Amazon ECR
+├─ FastAPI app ──(Dockerfile)──> GitHub Actions ──> Amazon ECR
    │
    ▼
-AWS Lambda (container image)
+├─ AWS Lambda (container image)
    │
    ▼
-Function URL: /healthz, /predict
+└─ Function URL: /healthz, /predict
 ```
 
 > **Tip:** Prefer deploying Lambda with an immutable **commit-SHA tag** (e.g., `:2918ddb`) instead of `:latest`.
 
----
-
 ## Repo layout
-
 ```text
 ├─ app/
 │  ├─ __init__.py
@@ -115,7 +111,7 @@ streamlit run .\streamlit_app.py
 
 ## CI/CD (GitHub Actions → ECR)
 
-- Workflow: `.github/workflows/ecr-push.yml` (badge at top of this README)  
+- Workflow: `.github/workflows/ecr-push.yml` (badge at top of this README)
 - Secrets (Repo → **Settings** → **Secrets and variables** → **Actions**):  
   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`  
   Optional env (defaults assumed): `AWS_REGION=us-east-1`, `ECR_REPO=ccfd-repo`
@@ -132,7 +128,6 @@ Trigger a run by pushing to `main` or use **Actions → Build and Push to ECR �
 **Prereqs:** ECR image exists; IAM role with policy `AWSLambdaBasicExecutionRole`.
 
 **Create or update function (PowerShell)**
-
 ```powershell
 $Profile="YOUR_AWS_PROFILE"; $Region="us-east-1"
 $Account="<YOUR_ACCOUNT_ID>"; $Repo="ccfd-repo"
@@ -143,10 +138,10 @@ $Sha7 = aws ecr describe-images --profile $Profile --region $Region --repository
 if (-not $Sha7 -or $Sha7 -eq "None" -or $Sha7 -eq "") { $Sha7 = git rev-parse --short=7 HEAD }
 $ImageUri = "{0}.dkr.ecr.{1}.amazonaws.com/{2}:{3}" -f $Account, $Region, $Repo, $Sha7
 
-# Get role ARN (create/attach AWSLambdaBasicExecutionRole first time)
+# Get role ARN (create & attach AWSLambdaBasicExecutionRole if missing)
 $RoleArn = aws iam get-role --profile $Profile --region $Region --role-name ccfd-lambda-role --query "Role.Arn" --output text
 
-# Create (first time only)
+# Create (first time) or update (subsequent)
 aws lambda create-function `
   --profile $Profile --region $Region `
   --function-name ccfd-fn `
@@ -156,7 +151,6 @@ aws lambda create-function `
   --timeout 15 --memory-size 1024 `
   --environment Variables="{APP_NAME=fraud-inference,MODEL_VERSION=v1,MODEL_PATH=/var/task/artifacts/model.joblib}" 2>$null
 
-# Update (subsequent)
 aws lambda update-function-code `
   --profile $Profile --region $Region `
   --function-name ccfd-fn `
