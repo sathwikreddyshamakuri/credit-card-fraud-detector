@@ -1,168 +1,201 @@
-# Credit Card Fraud Detector (Streamlit + scikit-learn)
+# Credit Card Fraud Detector — FastAPI + Lambda + Streamlit
 
-A VS Code project to train a model on the Kaggle credit-card fraud dataset and run an interactive UI for scoring transactions.
+Train a scikit-learn model on the credit-card fraud dataset and run a production-style **inference API** (FastAPI) packaged as a **container** and deployed on **AWS Lambda** (via **Amazon ECR**). Includes an optional Streamlit UI for local demos and a GitHub Actions workflow that builds & pushes images to ECR.
 
----
-
-## Features
-- **Training (`train.py`)** → exports `artifacts/model.joblib` and `artifacts/feature_stats.json`
-- **Frontend (`app.py`)** → Tabs for **Batch CSV**, **JSON Row**, and **Quick Predict**
-- **Threshold tuning** in the app, plus offline scripts:
-  - `metrics.py` (confusion matrix at chosen threshold)
-  - `metrics_sweep.py` (precision/recall vs threshold; writes `threshold_sweep.csv`)
-  - `metrics_topk.py` (evaluate a fixed number of alerts / Top-K)
-- Clean `.gitignore` to keep data and large artifacts out of Git
+- **Model:** Logistic Regression (30 features), hold-out **ROC AUC ≈ 0.972**
+- **API:** FastAPI (`/healthz`, `/predict`) adapted for Lambda with Mangum
+- **Infra:** Container image in **ECR**, executed by **AWS Lambda** (Function URL for testing)
+- **CI/CD:** GitHub Actions builds & pushes **`:latest`** and **`:<commit-sha>`** tags for reproducible rollouts
 
 ---
 
-## Project structure
+## Architecture
 
-credit-card-fraud-detector/
-├─ app.py
-├─ train.py
-├─ metrics.py
-├─ metrics_sweep.py
-├─ metrics_topk.py
-├─ requirements.txt
-├─ .gitignore
-├─ README.md
-├─ data/ # put Kaggle CSV here (ignored)
-└─ artifacts/ # model + stats (model ignored by default)
-├─ model.joblib
-└─ feature_stats.json
+[train.py] ──> artifacts/model.joblib
+│
+▼
+[FastAPI app] ──(Dockerfile)──> GitHub Actions ──> Amazon ECR
+│
+▼
+AWS Lambda (container image)
+│
+▼
+Function URL: /healthz, /predict
+---
+
+
+> **Tip:** Deploy Lambda with an immutable **commit-SHA tag** (e.g., `:49f95a8`) instead of `:latest`.
+
+---
+
+## Repo layout
+
+├─ app/
+│ ├─ init.py
+│ ├─ main.py # FastAPI app (local + Lambda via Mangum)
+│ └─ lambda_handler.py # Lambda entrypoint
+├─ artifacts/
+│ └─ model.joblib # Trained model (from train.py or baked in image)
+├─ data/
+│ └─ creditcard.csv # Dataset (see Dataset section)
+├─ infra/
+│ └─ terraform/ # IaC sources (provider cache not committed)
+├─ scripts/
+│ ├─ make_dummy_model.py # Scaffold helper
+│ └─ smoke.ps1 # Simple smoke test
+├─ streamlit_app.py # Optional local demo UI
+├─ train.py # Train + evaluate model; writes artifacts/*
+├─ requirements.txt # Pinned wheels for Lambda (no compilers)
+├─ Dockerfile # Lambda Python 3.11 base; bakes model
+└─ .github/workflows/
+└─ ecr_push.yaml
+---
 
 
 ---
 
-## Prerequisites
-- Python 3.10+
-- VS Code (recommended)
-- Git (for pushing to GitHub)
-- Kaggle dataset: place `creditcard.csv` at `data/creditcard.csv` (do NOT commit it)
+## Tech stack
+
+- **Modeling:** scikit-learn, numpy, joblib  
+- **Service:** FastAPI, Pydantic v2, Mangum (Lambda adapter), Uvicorn (local)  
+- **Infra:** Docker, Amazon ECR, AWS Lambda (container image), CloudWatch Logs  
+- **CI/CD:** GitHub Actions
 
 ---
 
-## Quickstart
-~~~bash
+## Quickstart (local, Windows PowerShell)
+
+```powershell
+# 1) Create & activate venv
 python -m venv .venv
-# Windows:
 .\.venv\Scripts\Activate.ps1
-# macOS/Linux:
-# source .venv/bin/activate
 
+# 2) Install dependencies
 pip install -r requirements.txt
 
-# Put Kaggle CSV at:
-# data/creditcard.csv
+# 3) Train the model (writes artifacts/model.joblib + artifacts/feature_stats.json)
+python .\train.py
 
-# Train and export artifacts (model + feature stats)
-python train.py
+# 4) Run API locally
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-# Run UI
-streamlit run app.py
-~~~
+# 5) Health check
+irm http://127.0.0.1:8000/healthz | ConvertTo-Json -Depth 5
 
-Open the local URL shown (usually http://localhost:8501).
+# 6) Predict (30 features)
+$body = @{ features = @(0.1,0.2,0.3,0.4,0.5,0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0); threshold = 0.5 } |
+  ConvertTo-Json -Compress
+irm -Method Post -Uri "http://127.0.0.1:8000/predict" -ContentType 'application/json' -Body $body |
+  ConvertTo-Json -Depth 5
 
----
+# (Optional) Streamlit UI
+streamlit run .\streamlit_app.py
+```
+## API
 
-## Using the app
+**Base:** local `http://127.0.0.1:8000` or your **Lambda Function URL**
 
-### 1) Batch CSV (recommended)
-Upload a CSV matching your model’s schema (`Time, V1..V28, Amount`).  
-Click **Run Prediction on CSV**, then **Download all results (CSV)** to get `fraud_scores.csv` with:
-- `fraud_probability` (model score for class 1 = fraud)
-- `is_fraud_pred` (1=fraud, 0=legit) based on the current threshold
-
-### 2) JSON Row (single transaction)
-Paste one JSON object. Provide as many features as you can; missing values are filled from `feature_stats.json` (or 0.0 if absent).
-~~~json
-{"Time": 10000, "Amount": 250.75}
-~~~
-For best accuracy, paste the full schema (`Time, V1..V28, Amount`).
-
-### 3) Quick Predict (what-if)
-Enter **Amount** (and optional **Time**) and the app fills other features from defaults (median). Useful for demos; **not** a substitute for real rows.
-
----
-
-## Threshold tuning
-
-In the app, move the **Decision threshold** slider. Higher threshold → fewer flags, higher precision; lower threshold → more flags, higher recall.
-
-Offline, you can analyze thresholds with:
-~~~bash
-python metrics.py        # Confusion matrix at your scored threshold
-python metrics_sweep.py  # Writes threshold_sweep.csv with precision/recall vs threshold
-python metrics_topk.py   # Evaluate a fixed number of alerts (Top-K)
-~~~
-
-**Tip:** You can set a default threshold via a small config:
-- Create `artifacts/config.json`:
-  ~~~json
-  {"threshold": 0.999}
-  ~~~
-- In `app.py`, read it to initialize the slider (already scaffolded in comments).
+- `GET /healthz` → `{"ok": true, "version": "v1", "has_model": true}`
+- `POST /predict`
+  - **Request**
+    ```json
+    {
+      "features": [0.1, 0.2, "... 30 floats total ..."],
+      "threshold": 0.5
+    }
+    ```
+  - **Response**
+    ```json
+    {
+      "request_id": "uuid",
+      "model_version": "v1",
+      "prob": 0.009,
+      "label": 0
+    }
+    ```
 
 ---
 
-## Training details
+## CI/CD (GitHub Actions → ECR)
 
-`train.py`:
-- Loads `data/creditcard.csv`
-- Splits into train/valid (stratified)
-- Trains a baseline Logistic Regression with `class_weight="balanced"`
-- Exports:
-  - `artifacts/model.joblib` (inference pipeline)
-  - `artifacts/feature_stats.json` (feature order, medians, and input ranges)
-
-Re-run `python train.py` any time you change the model.
+- Workflow: `.github/workflows/ecr_push.yaml`
+- Secrets (Repo → Settings → Secrets and variables → Actions):  
+  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`  
+  Optional env: `AWS_REGION=us-east-1`, `ECR_REGISTRY=<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com`, `ECR_REPO=ccfd-repo`
+- Output images:
+<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/ccfd-repo:latest
+<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/ccfd-repo:<sha7>
+---
+```sql
 
 ---
 
-## Evaluating predictions
+## Deploy to AWS Lambda (container image)
 
-After downloading **all results** from the app as `fraud_scores.csv`, you can compute metrics:
-~~~bash
-python metrics.py
-# prints confusion matrix, precision, recall, F1, accuracy
-~~~
+**Prereqs:** ECR image exists; IAM role with policy `AWSLambdaBasicExecutionRole`.
 
-If you downloaded only **Top-K**, use a robust join approach:
-1) Create dataset with a stable `row_id`:
-   ~~~bash
-   python make_with_id.py
-   ~~~
-2) Score `creditcard_with_id.csv`
-3) Run a join-based `metrics.py` (included in repo instructions)
+**Create or update function**
+```powershell
+$Profile="YOUR_AWS_PROFILE"; $Region="us-east-1"
+$Account="<YOUR_ACCOUNT_ID>"; $Sha7="<sha7-from-ECR-or-Actions>"
+$ImageUri="$Account.dkr.ecr.$Region.amazonaws.com/ccfd-repo:$Sha7"
 
+# (First time) get/create role and set $RoleArn accordingly
+$RoleArn = (aws iam get-role --profile $Profile --region $Region --role-name ccfd-lambda-role --query "Role.Arn" --output text)
+
+# Create (first time)
+aws lambda create-function `
+--profile $Profile --region $Region `
+--function-name ccfd-fn `
+--package-type Image `
+--code ImageUri=$ImageUri `
+--role $RoleArn `
+--timeout 15 --memory-size 1024 `
+--environment Variables="{APP_NAME=fraud-inference,MODEL_VERSION=v1,MODEL_PATH=/var/task/artifacts/model.joblib}" 2>$null
+
+# Update (subsequent)
+aws lambda update-function-code `
+--profile $Profile --region $Region `
+--function-name ccfd-fn `
+--image-uri $ImageUri
+```
+## Function URL(For Quick Testing)
+```powershell
+aws lambda create-function-url-config `
+  --profile $Profile --region $Region `
+  --function-name ccfd-fn `
+  --auth-type NONE 2>$null
+
+$FnUrl = aws lambda get-function-url-config `
+  --profile $Profile --region $Region `
+  --function-name ccfd-fn `
+  --query "FunctionUrl" --output text
+"Function URL: $FnUrl"
+```
+## Test (PowerShell)
+```powershell
+# Health
+irm "$FnUrl/healthz" | ConvertTo-Json -Depth 5
+
+# Predict (30 features)
+$body = @{ features = @(0.1,0.2,0.3,0.4,0.5,0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0); threshold = 0.5 } |
+  ConvertTo-Json -Compress
+irm -Method Post -Uri "$FnUrl/predict" -ContentType 'application/json' -Body $body |
+  ConvertTo-Json -Depth 5
+```
+## Data/creditcard.csv
+
+**Get the data:** download `creditcard.csv` from the Kaggle “Credit Card Fraud Detection” dataset page and save it under `./data/`.  
+> Note: the dataset’s license/terms are controlled by its provider; do not commit or redistribute the raw CSV in this repo.
+
+After placing the file, you can train and evaluate:
+
+```powershell
+python .\train.py
+```
+This writes the artifacts used by the API:
+```bash
+artifacts/model.joblib
+artifacts/feature_stats.json
+```
 ---
-
-## Troubleshooting
-
-- **No `model.joblib` / `feature_stats.json` in artifacts**
-  - Run `python train.py` (ensure `data/creditcard.csv` exists)
-- **Metrics say “Row count mismatch”**
-  - You likely downloaded only Top-K. Re-download **all** predictions, or use the join method with `row_id`.
-- **Port issue on 8501**
-  ~~~bash
-  streamlit run app.py --server.port 8502
-  ~~~
-- **Telemetry prompt / opt-out**
-  Create `%USERPROFILE%\.streamlit\config.toml` (Windows):
-  ~~~toml
-  [browser]
-  gatherUsageStats = false
-  ~~~
-
----
-
-## Notes & Acknowledgements
-- Dataset: “Credit Card Fraud Detection” (Kaggle).
-- Consider probability calibration (e.g., `CalibratedClassifierCV`) and tree models for improved performance.
-
-## License
-MIT (replace with your preferred license)
-
-[![Python CI](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml)
-
