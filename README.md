@@ -11,7 +11,6 @@ Train a scikit-learn model on the credit-card fraud dataset and run a production
 
 ## Architecture
 
-```
 train.py  --->  artifacts/model.joblib
     |
     v
@@ -19,15 +18,13 @@ FastAPI app + Dockerfile  --->  GitHub Actions  --->  Amazon ECR
     |
     v
 AWS Lambda (container image)  --->  Function URL (/healthz, /predict)
-```
+
 
 > Tip: Prefer deploying Lambda with `:<commit-sha7>` instead of `:latest`.
 
----
-
 ## Repo layout
 
-```
+
 app/
   __init__.py
   main.py              # FastAPI app (local + Lambda via Mangum)
@@ -46,7 +43,7 @@ requirements.txt       # Pinned wheels for Lambda (no compilers)
 Dockerfile             # Lambda Python 3.11 base; bakes model
 .github/workflows/
   ecr_push.yaml
-```
+
 
 ---
 
@@ -56,7 +53,7 @@ Dockerfile             # Lambda Python 3.11 base; bakes model
 # 1) Create & activate venv
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-
+```
 # 2) Install dependencies
 pip install -r requirements.txt
 
@@ -70,13 +67,12 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 irm http://127.0.0.1:8000/healthz | ConvertTo-Json -Depth 5
 
 # 6) Predict (30 features)
+```
 $body = @{ features = @(0.1,0.2,0.3,0.4,0.5,0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0); threshold = 0.5 } |
   ConvertTo-Json -Compress
 irm -Method Post -Uri "http://127.0.0.1:8000/predict" -ContentType 'application/json' -Body $body |
   ConvertTo-Json -Depth 5
 ```
-
----
 
 ## API
 
@@ -157,7 +153,7 @@ jobs:
 $Profile="YOUR_AWS_PROFILE"; $Region="us-east-1"
 $Account="<ACCOUNT_ID>"; $Sha7="<sha7-from-ECR-or-Actions>"
 $ImageUri="$Account.dkr.ecr.$Region.amazonaws.com/ccfd-repo:$Sha7"
-
+```
 # First time
 $RoleArn = aws iam get-role --profile $Profile --region $Region --role-name ccfd-lambda-role --query "Role.Arn" --output text
 aws lambda create-function `
@@ -172,7 +168,7 @@ aws lambda update-function-code `
   --profile $Profile --region $Region `
   --function-name ccfd-fn `
   --image-uri $ImageUri
-```
+
 
 **Function URL (quick testing)**
 ```powershell
