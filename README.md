@@ -1,168 +1,199 @@
 # Credit Card Fraud Detector (Streamlit + scikit-learn)
 
-A VS Code project to train a model on the Kaggle credit-card fraud dataset and run an interactive UI for scoring transactions.
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+Train a baseline model on the Kaggle credit-card fraud dataset and run an interactive Streamlit UI to score transactions and tune decision thresholds.
 
 ---
 
 ## Features
-- **Training (`train.py`)** → exports `artifacts/model.joblib` and `artifacts/feature_stats.json`
-- **Frontend (`app.py`)** → Tabs for **Batch CSV**, **JSON Row**, and **Quick Predict**
-- **Threshold tuning** in the app, plus offline scripts:
-  - `metrics.py` (confusion matrix at chosen threshold)
-  - `metrics_sweep.py` (precision/recall vs threshold; writes `threshold_sweep.csv`)
-  - `metrics_topk.py` (evaluate a fixed number of alerts / Top-K)
-- Clean `.gitignore` to keep data and large artifacts out of Git
+
+- **Training** (`train.py`) → exports `artifacts/model.joblib` and `artifacts/feature_stats.json`
+- **Streamlit UI** (`streamlit_app.py`) with three tabs:
+  - **Batch CSV** (recommended)
+  - **JSON Row** (single transaction)
+  - **Quick Predict** (what-if)
+- **Threshold analysis scripts**
+  - `metrics.py` – confusion matrix & metrics at a chosen threshold
+  - `metrics_sweep.py` – precision/recall vs threshold (writes `threshold_sweep.csv`)
+  - `metrics_topk.py` – evaluate a fixed alert budget (Top-K)
+- Clean `.gitignore` to keep large data/artifacts out of Git
+- Dockerfile for containerized runs
+- (Optional) IaC in `infra/terraform` and an ECR push workflow for deployments
 
 ---
 
 ## Project structure
 
+```text
 credit-card-fraud-detector/
-├─ app.py
-├─ train.py
+├─ app/                      # backend/infra helpers (optional)
+├─ artifacts/                # model + stats (ignored by git)
+│  └─ model.joblib
+├─ data/                     # place Kaggle CSV here (ignored)
+├─ infra/
+│  └─ terraform/             # IaC (optional deploy)
+├─ notebooks/                # EDA/experiments
+├─ scripts/                  # helper scripts
+├─ streamlit_app.py          # Streamlit UI (main demo)
+├─ train.py                  # train + export artifacts
 ├─ metrics.py
 ├─ metrics_sweep.py
 ├─ metrics_topk.py
 ├─ requirements.txt
-├─ .gitignore
-├─ README.md
-├─ data/ # put Kaggle CSV here (ignored)
-└─ artifacts/ # model + stats (model ignored by default)
-├─ model.joblib
-└─ feature_stats.json
+├─ Dockerfile
+├─ ecr-push.yml              # GitHub Actions: build & push image
+└─ README.md
 
+```
+
+> **Dataset**: “Credit Card Fraud Detection” (Kaggle). Place `creditcard.csv` at `data/creditcard.csv` (do **not** commit it).
 
 ---
 
 ## Prerequisites
-- Python 3.10+
-- VS Code (recommended)
-- Git (for pushing to GitHub)
-- Kaggle dataset: place `creditcard.csv` at `data/creditcard.csv` (do NOT commit it)
+
+- Python **3.10+**
+- (Optional) VS Code
+- Kaggle dataset file at `data/creditcard.csv`
 
 ---
 
 ## Quickstart
-~~~bash
+
+```bash
 python -m venv .venv
-# Windows:
+# Windows
 .\.venv\Scripts\Activate.ps1
-# macOS/Linux:
+# macOS/Linux
 # source .venv/bin/activate
 
 pip install -r requirements.txt
 
-# Put Kaggle CSV at:
-# data/creditcard.csv
-
 # Train and export artifacts (model + feature stats)
 python train.py
 
-# Run UI
-streamlit run app.py
-~~~
-
-Open the local URL shown (usually http://localhost:8501).
-
----
+# Run the UI
+streamlit run streamlit_app.py
+```
+Open the local URL Streamlit prints (usually http://localhost:8501).
 
 ## Using the app
 
 ### 1) Batch CSV (recommended)
-Upload a CSV matching your model’s schema (`Time, V1..V28, Amount`).  
+Upload a CSV matching the model schema (`Time, V1..V28, Amount`).  
 Click **Run Prediction on CSV**, then **Download all results (CSV)** to get `fraud_scores.csv` with:
-- `fraud_probability` (model score for class 1 = fraud)
-- `is_fraud_pred` (1=fraud, 0=legit) based on the current threshold
+- `fraud_probability` – model score for class 1 (fraud)
+- `is_fraud_pred` – (1 = fraud, 0 = legit) given your current threshold
 
 ### 2) JSON Row (single transaction)
-Paste one JSON object. Provide as many features as you can; missing values are filled from `feature_stats.json` (or 0.0 if absent).
-~~~json
+Paste one JSON object. Missing features are filled from `feature_stats.json` (or `0.0` if absent).
+
+```json
 {"Time": 10000, "Amount": 250.75}
-~~~
-For best accuracy, paste the full schema (`Time, V1..V28, Amount`).
+```
+For best accuracy, include full schema (Time, V1..V28, Amount).
+### Quick Predict(what if)
+Enter Amount (and optional Time); the app fills the rest from medians. Handy for demos, not for production decisions.
 
-### 3) Quick Predict (what-if)
-Enter **Amount** (and optional **Time**) and the app fills other features from defaults (median). Useful for demos; **not** a substitute for real rows.
+### Threshold tuning
+Inside the app, adjust the Decision threshold slider:
 
----
+- Higher threshold → fewer flags (↑ precision, ↓ recall)
+  
+- Lower threshold → more flags (↑ recall, ↓ precision)
 
-## Threshold tuning
 
-In the app, move the **Decision threshold** slider. Higher threshold → fewer flags, higher precision; lower threshold → more flags, higher recall.
-
-Offline, you can analyze thresholds with:
-~~~bash
-python metrics.py        # Confusion matrix at your scored threshold
-python metrics_sweep.py  # Writes threshold_sweep.csv with precision/recall vs threshold
-python metrics_topk.py   # Evaluate a fixed number of alerts (Top-K)
-~~~
-
-**Tip:** You can set a default threshold via a small config:
-- Create `artifacts/config.json`:
-  ~~~json
-  {"threshold": 0.999}
-  ~~~
-- In `app.py`, read it to initialize the slider (already scaffolded in comments).
-
----
-
+Offline analysis:
+```bash
+python metrics.py        # Confusion matrix, precision, recall, F1, accuracy
+python metrics_sweep.py  # Writes threshold_sweep.csv (precision/recall vs threshold)
+python metrics_topk.py   # Evaluate a fixed alert budget (Top-K)
+```
+Optionally set a default threshold with a tiny config file:
+```json
+// artifacts/config.json
+{"threshold": 0.999}
+```
 ## Training details
 
 `train.py`:
 - Loads `data/creditcard.csv`
-- Splits into train/valid (stratified)
-- Trains a baseline Logistic Regression with `class_weight="balanced"`
+- Stratified train/validation split
+- Baseline **LogisticRegression** with `class_weight="balanced"`
 - Exports:
   - `artifacts/model.joblib` (inference pipeline)
-  - `artifacts/feature_stats.json` (feature order, medians, and input ranges)
+  - `artifacts/feature_stats.json` (feature order, medians, ranges)
 
-Re-run `python train.py` any time you change the model.
+Re-run `python train.py` whenever you change features or model.
 
 ---
 
-## Evaluating predictions
+## Docker
 
-After downloading **all results** from the app as `fraud_scores.csv`, you can compute metrics:
-~~~bash
-python metrics.py
-# prints confusion matrix, precision, recall, F1, accuracy
-~~~
+Build and run locally:
 
-If you downloaded only **Top-K**, use a robust join approach:
-1) Create dataset with a stable `row_id`:
-   ~~~bash
-   python make_with_id.py
-   ~~~
-2) Score `creditcard_with_id.csv`
-3) Run a join-based `metrics.py` (included in repo instructions)
+```bash
+# Build
+docker build -t cc-fraud:latest .
+
+# Run (maps port 8501; mount local dirs to reuse artifacts/data)
+docker run --rm -p 8501:8501 \
+  -v "$PWD/artifacts:/app/artifacts" \
+  -v "$PWD/data:/app/data" \
+  cc-fraud:latest
+---
+``````markdown
+Then open http://localhost:8501
+`````
+---
+
+## Deployment (high level)
+
+- **Push image**: The included GitHub Actions workflow `ecr_push.yaml` can build and push a Docker image to Amazon ECR.
+- **Infra**: `infra/terraform` contains Terraform to provision cloud resources (e.g., ECR/ECS/ALB).  
+  Fill in variables for your AWS account/region, run `terraform init/plan/apply`, and point the service to the pushed image.
+
+> Configure required GitHub Secrets (AWS creds/region, repo name, etc.) for the ECR workflow.
 
 ---
 
 ## Troubleshooting
 
-- **No `model.joblib` / `feature_stats.json` in artifacts**
-  - Run `python train.py` (ensure `data/creditcard.csv` exists)
-- **Metrics say “Row count mismatch”**
-  - You likely downloaded only Top-K. Re-download **all** predictions, or use the join method with `row_id`.
-- **Port issue on 8501**
-  ~~~bash
-  streamlit run app.py --server.port 8502
-  ~~~
-- **Telemetry prompt / opt-out**
-  Create `%USERPROFILE%\.streamlit\config.toml` (Windows):
-  ~~~toml
+- Missing `artifacts/model.joblib` or `feature_stats.json` → run `python train.py` (and ensure `data/creditcard.csv` exists).
+- “Row count mismatch” in metrics → you likely evaluated only Top-K. Re-download **all** predictions or use a join-based approach with a stable `row_id`.
+- Port conflict on 8501 → `streamlit run streamlit_app.py --server.port 8502`.
+- Streamlit telemetry prompt/opt-out (Windows):
+
+  ```toml
+  # %USERPROFILE%\.streamlit\config.toml
   [browser]
   gatherUsageStats = false
-  ~~~
+  ```
+---
+
+## Security & privacy
+
+- Never commit `data/creditcard.csv` or real customer data.
+- Run a secret scan before pushing (`gitleaks`, `trufflehog`, etc.).
+- This project is for **educational/demo** purposes; calibrate, validate, and govern appropriately for production.
 
 ---
 
-## Notes & Acknowledgements
-- Dataset: “Credit Card Fraud Detection” (Kaggle).
-- Consider probability calibration (e.g., `CalibratedClassifierCV`) and tree models for improved performance.
+## Roadmap (ideas)
+
+- Probability calibration (`CalibratedClassifierCV`)
+- Tree-based / boosted models; class-weight vs resampling
+- Hyperparameter search & model registry
+- SHAP/feature-importance report
+- CI: lint/test, data-contract checks
+
+---
 
 ## License
-MIT (replace with your preferred license)
 
-[![Python CI](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/sathwikreddyshamakuri/credit-card-fraud-detector/actions/workflows/ci.yml)
+MIT – see [LICENSE](LICENSE).
+
+
 
