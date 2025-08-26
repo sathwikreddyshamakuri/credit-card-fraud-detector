@@ -27,6 +27,8 @@ Train a scikit-learn model on the credit-card fraud dataset and run a production
 
 > **Tip:** Prefer deploying Lambda with an immutable **commit-SHA tag** (e.g., `:2918ddb`) instead of `:latest`.
 
+---
+
 ## Repo layout
 ```text
 ├─ app/
@@ -36,7 +38,7 @@ Train a scikit-learn model on the credit-card fraud dataset and run a production
 ├─ artifacts/
 │  └─ model.joblib       # Trained model (from train.py or baked in image)
 ├─ data/
-│  └─ creditcard.csv     # Dataset (see Dataset section)
+│  └─ creditcard.csv     # Dataset (see Dataset)
 ├─ scripts/
 │  ├─ __init__.py
 │  ├─ make_dummy_model.py
@@ -64,7 +66,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # 3) Train the model (writes artifacts/model.joblib + artifacts/feature_stats.json)
-python .	rain.py
+python .\train.py
 
 # 4) Run API locally
 uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -128,6 +130,7 @@ Trigger a run by pushing to `main` or use **Actions → Build and Push to ECR �
 **Prereqs:** ECR image exists; IAM role with policy `AWSLambdaBasicExecutionRole`.
 
 **Create or update function (PowerShell)**
+
 ```powershell
 $Profile="YOUR_AWS_PROFILE"; $Region="us-east-1"
 $Account="<YOUR_ACCOUNT_ID>"; $Repo="ccfd-repo"
@@ -141,7 +144,7 @@ $ImageUri = "{0}.dkr.ecr.{1}.amazonaws.com/{2}:{3}" -f $Account, $Region, $Repo,
 # Get role ARN (create & attach AWSLambdaBasicExecutionRole if missing)
 $RoleArn = aws iam get-role --profile $Profile --region $Region --role-name ccfd-lambda-role --query "Role.Arn" --output text
 
-# Create (first time) or update (subsequent)
+# Create (first time only)
 aws lambda create-function `
   --profile $Profile --region $Region `
   --function-name ccfd-fn `
@@ -151,6 +154,7 @@ aws lambda create-function `
   --timeout 15 --memory-size 1024 `
   --environment Variables="{APP_NAME=fraud-inference,MODEL_VERSION=v1,MODEL_PATH=/var/task/artifacts/model.joblib}" 2>$null
 
+# Update (subsequent)
 aws lambda update-function-code `
   --profile $Profile --region $Region `
   --function-name ccfd-fn `
@@ -189,4 +193,4 @@ This project expects `data/creditcard.csv` (Kaggle: **“Credit Card Fraud Detec
 
 ## License
 
-MIT License — see `LICENSE`.
+MIT — see `LICENSE`.
