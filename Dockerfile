@@ -8,3 +8,5 @@ COPY app ./app
 COPY artifacts ./artifacts
 
 CMD [ "app.lambda_handler.handler" ]
+
+# ci: trigger
