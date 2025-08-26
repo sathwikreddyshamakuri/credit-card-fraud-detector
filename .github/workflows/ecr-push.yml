@@ -1,59 +1,40 @@
-﻿name: Build & Push to ECR
-
+﻿name: Build and Push to ECR
 on:
-  workflow_dispatch: {}
   push:
     branches: [ main ]
-    paths:
-      - "Dockerfile"
-      - "requirements.txt"
-      - "**/*.py"
-      - ".github/workflows/ecr-push.yml"
+  workflow_dispatch:
 
 jobs:
-  build-and-push:
+  build-push:
     runs-on: ubuntu-latest
-    env:
-      AWS_REGION: us-east-1
-      ECR_REPO: ccfd  # <-- set to your actual ECR repo name
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
-      - name: Login to ECR
-        id: login-ecr
+      - name: Login to Amazon ECR
+        id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Ensure ECR repository exists
-        run: |
-          aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" >/dev/null 2>&1 || \
-          aws ecr create-repository \
-            --repository-name "$ECR_REPO" \
-            --image-scanning-configuration scanOnPush=true \
-            --encryption-configuration encryptionType=AES256 \
-            --region "$AWS_REGION"
+      - name: Extract short SHA
+        id: vars
+        run: echo "SHA7=$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
 
-      - name: Build and push :latest and :sha7
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          GIT_SHA: ${{ github.sha }}
+      - name: Build image
         run: |
-          set -e
-          SHORT_SHA=${GIT_SHA::7}
-          docker build -t "$ECR_REGISTRY/$ECR_REPO:latest" -t "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA" -f Dockerfile .
-          docker push "$ECR_REGISTRY/$ECR_REPO:latest"
-          docker push "$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA"
+          docker build -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:latest `
+                       -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:${{ steps.vars.outputs.SHA7 }} .
 
-          {
-            echo "### Pushed images"
-            echo "- \`$ECR_REGISTRY/$ECR_REPO:latest\`"
-            echo "- \`$ECR_REGISTRY/$ECR_REPO:$SHORT_SHA\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Push image
+        run: |
+          docker push ${{ steps.ecr.outputs.registry }}/ccfd-repo:latest
+          docker push ${{ steps.ecr.outputs.registry }}/ccfd-repo:${{ steps.vars.outputs.SHA7 }}
