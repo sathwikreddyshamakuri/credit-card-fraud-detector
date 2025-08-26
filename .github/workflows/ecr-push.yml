@@ -19,7 +19,7 @@ jobs:
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: us-east-1
 
       - name: Login to Amazon ECR
         id: ecr
@@ -30,9 +30,7 @@ jobs:
         run: echo "SHA7=$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
 
       - name: Build image
-        run: |
-          docker build -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:latest `
-                       -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:${{ steps.vars.outputs.SHA7 }} .
+        run: docker build -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:latest -t ${{ steps.ecr.outputs.registry }}/ccfd-repo:${{ steps.vars.outputs.SHA7 }} .
 
       - name: Push image
         run: |
