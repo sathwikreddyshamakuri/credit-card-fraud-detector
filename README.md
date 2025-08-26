@@ -42,8 +42,7 @@ credit-card-fraud-detector/
 ├─ metrics_sweep.py
 ├─ metrics_topk.py
 ├─ requirements.txt
-├─ Dockerfile
-├─ ecr-push.yml              # GitHub Actions: build & push image
+├─ Dockerfile              # GitHub Actions: build & push image
 └─ README.md
 
 ```
