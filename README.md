@@ -25,26 +25,29 @@ Function URL: /healthz, /predict
 
 ## Repo layout
 
+## Repo layout
+
+```text
 ├─ app/
-│ ├─ init.py
-│ ├─ main.py # FastAPI app (local + Lambda via Mangum)
-│ └─ lambda_handler.py # Lambda entrypoint
+│  ├─ __init__.py
+│  ├─ main.py              # FastAPI app (local + Lambda via Mangum)
+│  └─ lambda_handler.py    # Lambda entrypoint
 ├─ artifacts/
-│ └─ model.joblib # Trained model (from train.py or baked in image)
+│  └─ model.joblib         # Trained model (from train.py or baked in image)
 ├─ data/
-│ └─ creditcard.csv # Dataset (see Dataset section)
+│  └─ creditcard.csv       # Dataset (see Dataset section)
 ├─ infra/
-│ └─ terraform/ # IaC sources (provider cache not committed)
+│  └─ terraform/           # IaC sources (provider cache not committed)
 ├─ scripts/
-│ ├─ make_dummy_model.py # Scaffold helper
-│ └─ smoke.ps1 # Simple smoke test
-├─ streamlit_app.py # Optional local demo UI
-├─ train.py # Train + evaluate model; writes artifacts/*
-├─ requirements.txt # Pinned wheels for Lambda (no compilers)
-├─ Dockerfile # Lambda Python 3.11 base; bakes model
+│  ├─ make_dummy_model.py  # Scaffold helper
+│  └─ smoke.ps1            # Simple smoke test
+├─ streamlit_app.py        # Optional local demo UI
+├─ train.py                # Train + evaluate model; writes artifacts/*
+├─ requirements.txt        # Pinned wheels for Lambda (no compilers)
+├─ Dockerfile              # Lambda Python 3.11 base; bakes model
 └─ .github/workflows/
-└─ ecr_push.yaml
----
+   └─ ecr_push.yaml
+```
 
 ## Tech stack
 
@@ -132,7 +135,7 @@ $ImageUri="$Account.dkr.ecr.$Region.amazonaws.com/ccfd-repo:$Sha7"
 # (First time) get/create role and set $RoleArn accordingly
 $RoleArn = (aws iam get-role --profile $Profile --region $Region --role-name ccfd-lambda-role --query "Role.Arn" --output text)
 
-# Create (first time)
+### Create (first time)
 aws lambda create-function `
 --profile $Profile --region $Region `
 --function-name ccfd-fn `
@@ -142,13 +145,13 @@ aws lambda create-function `
 --timeout 15 --memory-size 1024 `
 --environment Variables="{APP_NAME=fraud-inference,MODEL_VERSION=v1,MODEL_PATH=/var/task/artifacts/model.joblib}" 2>$null
 
-# Update (subsequent)
+### Update (subsequent)
 aws lambda update-function-code `
 --profile $Profile --region $Region `
 --function-name ccfd-fn `
 --image-uri $ImageUri
 
-## Function URL(For Quick Testing)
+### Function URL(For Quick Testing)
 ```powershell
 aws lambda create-function-url-config `
   --profile $Profile --region $Region `
